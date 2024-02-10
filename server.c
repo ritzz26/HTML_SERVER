@@ -148,34 +148,25 @@ void handle_request(struct server_app *app, int client_socket) {
     char *saveptr;
     char *line = strtok_r(request, "\r\n", &saveptr);
 
-    // Parse the first line of the request
     sscanf(line, "%s %s %s", method, path, protocol);
 
-    // Parse the rest of the request header
     while ((line = strtok_r(NULL, "\r\n", &saveptr)) != NULL) {
-        // Ignore the rest of the header
+        
     }
 
-    // Check if the request method is GET
-    if (strcasecmp(method, "GET") != 0) {
-        free(request);
-        send(client_socket, "HTTP/1.1 405 Method Not Allowed\r\n\r\n", 35, 0);
-        return;
-    }
-
-    // Handle local requests or proxy requests
     if (strcasecmp(protocol, "HTTP/1.1") == 0) {
-        if (strncmp(path, "/proxy", 6) == 0) {
-            // Proxy the request
-            proxy_remote_file(app, client_socket, request);
-        } else {
-            // Serve the local file
-            serve_local_file(client_socket, path);
-        }
+    if (strstr(path, ".ts") != NULL) {
+        // Forward .ts file request to the back-end video server
+        proxy_remote_file(app, client_socket, request);
     } else {
-        // Return an error for invalid protocol
-        free(request);
-        send(client_socket, "HTTP/1.1 505 HTTP Version Not Supported\r\n\r\n", 54, 0);
+        if (strcmp(path, "/") == 0) {
+            // Redirect requests for "/" to "index.html"
+            serve_local_file(client_socket, "/index.html");
+            free(request);
+            return;
+        }}
+        // Serve the local file
+        serve_local_file(client_socket, path);
     }
 
     free(request);
