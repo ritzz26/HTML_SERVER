@@ -237,7 +237,6 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
     char method[8], path[256], protocol[16];
     sscanf(request, "%s %s %s", method, path, protocol);
 
-    // Connect to the back-end video server
     int backend_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (backend_socket == -1) {
         perror("backend socket failed");
@@ -259,7 +258,7 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
     backend_addr.sin_family = AF_INET;
     backend_addr.sin_port = htons(app->remote_port);
     memcpy(&backend_addr.sin_addr.s_addr, backend_host->h_addr, backend_host->h_length);
-
+    //fix code HERE 
     if (connect(backend_socket, (struct sockaddr *)&backend_addr, sizeof(backend_addr)) == -1) {
         perror("backend connect failed");
         char response[] = "HTTP/1.1 502 Bad Gateway\r\n\r\n";
@@ -268,10 +267,8 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
         return;
     }
 
-    // Forward the client's request to the back-end video server
     send(backend_socket, request, strlen(request), 0);
 
-    // Forward the back-end video server's response back to the client
     char buffer[BUFFER_SIZE];
     ssize_t bytes_read;
     while ((bytes_read = recv(backend_socket, buffer, sizeof(buffer), 0)) > 0) {
