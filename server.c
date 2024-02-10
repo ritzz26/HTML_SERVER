@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
     struct server_app app;
     int server_socket, client_socket;
     struct sockaddr_in server_addr, client_addr;
-    socklen_t client_len;
+    socklen_t client_len = sizeof(client_addr);
     int ret;
 
     parse_args(argc, argv, &app);
