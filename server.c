@@ -228,6 +228,8 @@ void serve_local_file(int client_socket, const char *path) {
             content_type = "text/html; charset=utf-8";
         } else if (strcmp(ext, ".jpg") == 0) {
             content_type = "image/jpeg";
+        } else if (strcmp(ext, ".txt") == 0) {
+            content_type = "text/plain; charset=utf-8";
         }
     }
 
