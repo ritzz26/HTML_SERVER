@@ -256,9 +256,8 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
     // Bonus:
     // * When connection to the remote server fail, properly generate
     // HTTP 502 "Bad Gateway" response
-    char method[8], path[256], protocol[16];
-    sscanf(request, "%s %s %s", method, path, protocol);
-
+    // char method[8], path[256], protocol[16];
+    // sscanf(request, "%s %s %s", method, path, protocol);
     int backend_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (backend_socket == -1) {
         perror("backend socket failed");
@@ -267,20 +266,11 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
         return;
     }
 
-    struct hostent *backend_host = gethostbyname(app->remote_host);
-    if (backend_host == NULL) {
-        perror("gethostbyname failed");
-        char response[] = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
-        send(client_socket, response, strlen(response), 0);
-        close(backend_socket);
-        return;
-    }
-
     struct sockaddr_in backend_addr;
     backend_addr.sin_family = AF_INET;
     backend_addr.sin_port = htons(app->remote_port);
-    memcpy(&backend_addr.sin_addr.s_addr, backend_host->h_addr, backend_host->h_length);
-    //fix code HERE 
+    backend_addr.sin_addr.s_addr = inet_addr(app->remote_host);
+
     if (connect(backend_socket, (struct sockaddr *)&backend_addr, sizeof(backend_addr)) == -1) {
         perror("backend connect failed");
         char response[] = "HTTP/1.1 502 Bad Gateway\r\n\r\n";
