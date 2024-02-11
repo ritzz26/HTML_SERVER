@@ -283,8 +283,10 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
 
     char buffer[BUFFER_SIZE];
     ssize_t bytes_read;
-    while ((bytes_read = recv(backend_socket, buffer, sizeof(buffer), 0)) > 0) {
+    bytes_read = recv(backend_socket, buffer, sizeof(buffer), 0);
+    while (bytes_read > 0) {
         send(client_socket, buffer, bytes_read, 0);
+        bytes_read = recv(backend_socket, buffer, sizeof(buffer), 0);
     }
 
     close(backend_socket);
