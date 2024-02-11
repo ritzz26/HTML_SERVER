@@ -224,7 +224,7 @@ void serve_local_file(int client_socket, const char *path) {
     char *content_type = "application/octet-stream";
     char *ext = strrchr(path, '.');
     if (ext != NULL) {
-        if (strcmp(ext, ".html") == 0 || strcmp(ext, ".txt") == 0) {
+        if (strcmp(ext, ".html") == 0) {
             content_type = "text/html; charset=utf-8";
         } else if (strcmp(ext, ".jpg") == 0) {
             content_type = "image/jpeg";
