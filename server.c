@@ -168,6 +168,21 @@ void handle_request(struct server_app *app, int client_socket) {
             }
         }
     }
+    
+    for (i = 0; i < strlen(path); i++) {
+        if (path[i] == '%') {
+            if (i+1 < strlen(path) && path[i+1] == '2') {
+                if (i+2 < strlen(path) && path[i+2] == '5') {
+                    path[i] = '%';
+                    int j;
+                    for (j = i+3; path[j] != '\0'; ++j) {
+                        path[j-2] = path[j];
+                    }
+                    path[j-2] = '\0';
+                }
+            }
+        }
+    }
 
     if (strcasecmp(protocol, "HTTP/1.1") == 0) {
     if (strlen(path) > 3 && strcmp(path + strlen(path) - 3, ".ts") == 0) {
