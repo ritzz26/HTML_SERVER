@@ -149,9 +149,39 @@ void handle_request(struct server_app *app, int client_socket) {
     char *line = strtok_r(request, "\r\n", &saveptr);
 
     sscanf(line, "%s %s %s", method, path, protocol);
-
+    // printf("path: %s\n", path);
     while ((line = strtok_r(NULL, "\r\n", &saveptr)) != NULL) {
         
+    }
+    int i;
+    for (i = 0; i < strlen(path); i++) {
+        if (path[i] == '%') {
+            if (i+1 < strlen(path) && path[i+1] == '2') {
+                if (i+2 < strlen(path) && path[i+2] == '0') {
+                    path[i] = ' ';
+                    int j;
+                    for (j = i+3; path[j] != '\0'; ++j) {
+                        path[j-2] = path[j];
+                    }
+                    path[j-2] = '\0';
+                }
+            }
+        }
+    }
+    
+    for (i = 0; i < strlen(path); i++) {
+        if (path[i] == '%') {
+            if (i+1 < strlen(path) && path[i+1] == '2') {
+                if (i+2 < strlen(path) && path[i+2] == '5') {
+                    path[i] = '%';
+                    int j;
+                    for (j = i+3; path[j] != '\0'; ++j) {
+                        path[j-2] = path[j];
+                    }
+                    path[j-2] = '\0';
+                }
+            }
+        }
     }
 
     if (strcasecmp(protocol, "HTTP/1.1") == 0) {
@@ -194,10 +224,12 @@ void serve_local_file(int client_socket, const char *path) {
     char *content_type = "application/octet-stream";
     char *ext = strrchr(path, '.');
     if (ext != NULL) {
-        if (strcmp(ext, ".html") == 0 || strcmp(ext, ".txt") == 0) {
+        if (strcmp(ext, ".html") == 0) {
             content_type = "text/html; charset=utf-8";
         } else if (strcmp(ext, ".jpg") == 0) {
             content_type = "image/jpeg";
+        } else if (strcmp(ext, ".txt") == 0) {
+            content_type = "text/plain; charset=utf-8";
         }
     }
 
