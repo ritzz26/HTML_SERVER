@@ -1,15 +1,13 @@
+#include <arpa/inet.h>
+#include <getopt.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <getopt.h>
-#include <arpa/inet.h>
 #include <sys/socket.h>
-#include <sys/types.h>
-#include <netdb.h>
-
+#include <unistd.h>
 /**
  * Project 1 starter code
  * All parts needed to be changed/added are marked with TODO
@@ -19,6 +17,10 @@
 #define DEFAULT_SERVER_PORT 8081
 #define DEFAULT_REMOTE_HOST "131.179.176.34"
 #define DEFAULT_REMOTE_PORT 5001
+#define AUTO_PROTOCOL 0
+#define RESPONSE_BUFFER_SIZE 65536
+typedef int sockfd_t;
+
 
 struct server_app {
     // Parameters of the server
@@ -150,9 +152,7 @@ void handle_request(struct server_app *app, int client_socket) {
 
     sscanf(line, "%s %s %s", method, path, protocol);
     // printf("path: %s\n", path);
-    while ((line = strtok_r(NULL, "\r\n", &saveptr)) != NULL) {
-        
-    }
+  
     int i;
     for (i = 0; i < strlen(path); i++) {
         if (path[i] == '%') {
@@ -184,7 +184,6 @@ void handle_request(struct server_app *app, int client_socket) {
         }
     }
 
-    if (strcasecmp(protocol, "HTTP/1.1") == 0) {
     if (strlen(path) > 3 && strcmp(path + strlen(path) - 3, ".ts") == 0) {
         proxy_remote_file(app, client_socket, request);
     } else {
@@ -196,7 +195,6 @@ void handle_request(struct server_app *app, int client_socket) {
         }
         serve_local_file(client_socket, path);
         }
-    }
 
     free(request);
 }
@@ -256,75 +254,64 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
     // Bonus:
     // * When connection to the remote server fail, properly generate
     // HTTP 502 "Bad Gateway" response
-    char method[8], path[256], protocol[16];
-    sscanf(request, "%s %s %s", method, path, protocol);
-    printf("running1");
-    int backend_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (backend_socket == -1) {
-        perror("backend socket failed");
-        char response[] = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
-        send(client_socket, response, strlen(response), 0);
-        return;
+    
+    sockfd_t server_socket = socket(AF_INET, SOCK_STREAM, AUTO_PROTOCOL);
+    if (server_socket == -1)
+    {
+        perror("socket failed");
+        close(server_socket);
     }
 
-    struct addrinfo hints, *backend_info;
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    struct sockaddr_in myaddr;
-    int s;
+    struct sockaddr_in server_address;
+    server_address.sin_family = AF_INET;
+    server_address.sin_addr.s_addr = inet_addr(app->remote_host);
+    server_address.sin_port = htons(app->remote_port);
 
-    myaddr.sin_family = AF_INET;
-    myaddr.sin_port = htons(5001);
-    int getaddr_result = getaddrinfo(app->remote_host, NULL, &hints, &backend_info);
-    if (getaddr_result != 0) {
-        fprintf(stderr, "getaddrinfo failed: %s\n", gai_strerror(getaddr_result));
-        char response[] = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
-        send(client_socket, response, strlen(response), 0);
-        close(backend_socket);
-        return;
+    // Connect new server_socket to the video server's socket. If it fails, we
+    // send HTTP 502 Bad Gateway back to the original client.
+    if (connect(server_socket,
+                (struct sockaddr *)&server_address,
+                sizeof(server_address)) != 0)
+    {
+        fprintf(stderr, "connect() to video server failed\n");
+        
+        close(server_socket);
     }
 
-    const struct sockaddr *sock_add = &myaddr.sin_addr;
+    // Forward request to video server.
+    if (write(server_socket, request, strlen(request)) == -1)
+    {
+        fprintf(stderr, "write() to video server failed\n");
+        char response[] = "HTTP/1.0 502 Bad Gateway\r\n\r\n";
+            if (write(server_socket, response, sizeof(response)) == -1)
+                perror("write in send_bad_gateway failed");
+        close(server_socket);
+    }
 
-    if (connect(backend_socket, sock_add, sizeof(myaddr.sin_addr)) == -1) {
-    perror("backend connect failed");
-    char response[] = "HTTP/1.1 502 Bad Gateway\r\n\r\n";
-    send(client_socket, response, strlen(response), 0);
-    close(backend_socket);
-    freeaddrinfo(backend_info);
-    return;
-}
-    printf("running4");
-    freeaddrinfo(backend_info);
+    char response[RESPONSE_BUFFER_SIZE];
+    while (true)
+    {
+        ssize_t bytes_received = read(server_socket,
+                                      response,
+                                      sizeof(response));
+        if (bytes_received == -1)
+        {
+            fprintf(stderr, "read() from video server failed\n");
+            char response[] = "HTTP/1.0 502 Bad Gateway\r\n\r\n";
+            if (write(server_socket, response, sizeof(response)) == -1)
+                perror("write in send_bad_gateway failed");
+            close(server_socket);
+        }
+        if (bytes_received == 0)
+            break;
 
-    // Forward the original request to the remote server
-    send(backend_socket, request, strlen(request), 0);
-
-    // Get the response from the remote server
-    char buffer[BUFFER_SIZE];
-    ssize_t bytes_read;
-    while ((bytes_read = recv(backend_socket, buffer, sizeof(buffer), 0)) > 0) {
-        // Send the response back to the client with the correct HTTP headers
-        char *content_type = strstr(buffer, "Content-Type: ");
-        printf("running5");
-        if (content_type) {
-            // Extract the Content-Type from the response
-            content_type += strlen("Content-Type: ");
-            char *content_type_end = strchr(content_type, '\r');
-            if (content_type_end) {
-                *content_type_end = '\0';
-            }
-
-            // Send the HTTP headers back to the client
-            char response[BUFFER_SIZE];
-            snprintf(response, sizeof(response), "HTTP/1.1 200 OK\r\nContent-Type: %s\r\nContent-Length: %ld\r\n\r\n", content_type, strlen(buffer));
-            send(client_socket, response, strlen(response), 0);
-
-            // Send the response body back to the client
-            send(client_socket, buffer, bytes_read, 0);
+        // Forward response to original client.
+        if (write(client_socket, response, bytes_received) == -1)
+        {
+            perror("write failed");
+            close(server_socket);
         }
     }
 
-    // Close the connections
-    close(backend_socket);
+    close(server_socket);
 }
