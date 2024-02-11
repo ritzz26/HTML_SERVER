@@ -3,11 +3,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <getopt.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <netdb.h>
 
 /**
@@ -226,7 +226,7 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
     // HTTP 502 "Bad Gateway" response
     char method[8], path[256], protocol[16];
     sscanf(request, "%s %s %s", method, path, protocol);
-
+    printf("running1");
     int backend_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (backend_socket == -1) {
         perror("backend socket failed");
@@ -235,35 +235,64 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
         return;
     }
 
-    struct hostent *backend_host = gethostbyname(app->remote_host);
-    if (backend_host == NULL) {
-        perror("gethostbyname failed");
+    struct addrinfo hints, *backend_info;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    struct sockaddr_in myaddr;
+    int s;
+
+    myaddr.sin_family = AF_INET;
+    myaddr.sin_port = htons(5001);
+    int getaddr_result = getaddrinfo(app->remote_host, NULL, &hints, &backend_info);
+    if (getaddr_result != 0) {
+        fprintf(stderr, "getaddrinfo failed: %s\n", gai_strerror(getaddr_result));
         char response[] = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
         send(client_socket, response, strlen(response), 0);
         close(backend_socket);
         return;
     }
 
-    struct sockaddr_in backend_addr;
-    backend_addr.sin_family = AF_INET;
-    backend_addr.sin_port = htons(app->remote_port);
-    memcpy(&backend_addr.sin_addr.s_addr, backend_host->h_addr, backend_host->h_length);
-    //fix code HERE 
-    if (connect(backend_socket, (struct sockaddr *)&backend_addr, sizeof(backend_addr)) == -1) {
-        perror("backend connect failed");
-        char response[] = "HTTP/1.1 502 Bad Gateway\r\n\r\n";
-        send(client_socket, response, strlen(response), 0);
-        close(backend_socket);
-        return;
-    }
+    const struct sockaddr *sock_add = &myaddr.sin_addr;
 
+    if (connect(backend_socket, sock_add, sizeof(myaddr.sin_addr)) == -1) {
+    perror("backend connect failed");
+    char response[] = "HTTP/1.1 502 Bad Gateway\r\n\r\n";
+    send(client_socket, response, strlen(response), 0);
+    close(backend_socket);
+    freeaddrinfo(backend_info);
+    return;
+}
+    printf("running4");
+    freeaddrinfo(backend_info);
+
+    // Forward the original request to the remote server
     send(backend_socket, request, strlen(request), 0);
 
+    // Get the response from the remote server
     char buffer[BUFFER_SIZE];
     ssize_t bytes_read;
     while ((bytes_read = recv(backend_socket, buffer, sizeof(buffer), 0)) > 0) {
-        send(client_socket, buffer, bytes_read, 0);
+        // Send the response back to the client with the correct HTTP headers
+        char *content_type = strstr(buffer, "Content-Type: ");
+        printf("running5");
+        if (content_type) {
+            // Extract the Content-Type from the response
+            content_type += strlen("Content-Type: ");
+            char *content_type_end = strchr(content_type, '\r');
+            if (content_type_end) {
+                *content_type_end = '\0';
+            }
+
+            // Send the HTTP headers back to the client
+            char response[BUFFER_SIZE];
+            snprintf(response, sizeof(response), "HTTP/1.1 200 OK\r\nContent-Type: %s\r\nContent-Length: %ld\r\n\r\n", content_type, strlen(buffer));
+            send(client_socket, response, strlen(response), 0);
+
+            // Send the response body back to the client
+            send(client_socket, buffer, bytes_read, 0);
+        }
     }
 
+    // Close the connections
     close(backend_socket);
 }
