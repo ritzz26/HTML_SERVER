@@ -155,8 +155,7 @@ void handle_request(struct server_app *app, int client_socket) {
     }
 
     if (strcasecmp(protocol, "HTTP/1.1") == 0) {
-    if (strstr(path, ".ts") != NULL) {
-        // Forward .ts file request to the back-end video server
+    if (strlen(path) > 3 && strcmp(path + strlen(path) - 3, ".ts") == 0) {
         proxy_remote_file(app, client_socket, request);
     } else {
         if (strcmp(path, "/") == 0) {
@@ -164,9 +163,9 @@ void handle_request(struct server_app *app, int client_socket) {
             serve_local_file(client_socket, "/index.html");
             free(request);
             return;
-        }}
-        // Serve the local file
+        }
         serve_local_file(client_socket, path);
+        }
     }
 
     free(request);
