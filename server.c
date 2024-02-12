@@ -147,17 +147,17 @@ void handle_request(struct server_app *app, int client_socket) {
 
     // TODO: Parse the header and extract essential fields, e.g. file name
     size_t index = 5;
-    size_t characters_in_file_name = 0;
+    size_t num_chars = 0;
 
     while (request[index] != ' ')
     {
-        characters_in_file_name++;
+        num_chars++;
         index++;
     }
 
-    char file_name[characters_in_file_name + 1];
-    strncpy(file_name, request + 5, characters_in_file_name);
-    file_name[characters_in_file_name] = '\0';
+    char file_name[num_chars + 1];
+    strncpy(file_name, request + 5, num_chars);
+    file_name[num_chars] = '\0';
 
     // If the requested path is "/" (root), defaults to index.html.
     if (strlen(file_name) == 0)
@@ -167,22 +167,14 @@ void handle_request(struct server_app *app, int client_socket) {
             size_t length = strlen(file_name);
             for (size_t i = 0; i + 2 < length; i++)
             {
-                if (file_name[i] == '%' && file_name[i + 1] == '2')
+                if (file_name[i] == '%' && file_name[i + 1] == '2' && file_name[i + 2] == '0')
                 {
-                    if (file_name[i + 2] == '0')
-                    {
-                        file_name[i] = ' ';
-                        memmove(&file_name[i + 1],
-                                &file_name[i + 3],
-                                strlen(&file_name[i + 3]) + 1);
-                    }
-                    else if (file_name[i + 2] == '5')
-                    {
-                        file_name[i] = '%';
-                        memmove(&file_name[i + 1],
-                                &file_name[i + 3],
-                                strlen(&file_name[i + 3]) + 1);
-                    }
+                    file_name[i] = ' ';
+                    memmove(&file_name[i + 1], &file_name[i + 3], strlen(&file_name[i + 3]) + 1);
+                }
+                else if(file_name[i] == '%' && file_name[i + 1] == '2' && file_name[i + 2] == '5'){
+                    file_name[i] = '%';
+                    memmove(&file_name[i + 1], &file_name[i + 3], strlen(&file_name[i + 3]) + 1);
                 }
             }
         }
@@ -265,16 +257,16 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
         close(server_socket);
     }
 
-    struct sockaddr_in server_address;
-    server_address.sin_family = AF_INET;
-    server_address.sin_addr.s_addr = inet_addr(app->remote_host);
-    server_address.sin_port = htons(app->remote_port);
+    struct sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr(app->remote_host);
+    server_addr.sin_port = htons(app->remote_port);
 
     // Connect new server_socket to the video server's socket. If it fails, we
     // send HTTP 502 Bad Gateway back to the original client.
     if (connect(server_socket,
-                (struct sockaddr *)&server_address,
-                sizeof(server_address)) != 0)
+                (struct sockaddr *)&server_addr,
+                sizeof(server_addr)) != 0)
     {
         fprintf(stderr, "connect() to video server failed\n");
         
@@ -294,10 +286,10 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
     char response[RESPONSE_BUFFER_SIZE];
     while (true)
     {
-        ssize_t bytes_received = read(server_socket,
+        ssize_t bytes_read = read(server_socket,
                                       response,
                                       sizeof(response));
-        if (bytes_received == -1)
+        if (bytes_read == -1)
         {
             fprintf(stderr, "read() from video server failed\n");
             char response[] = "HTTP/1.0 502 Bad Gateway\r\n\r\n";
@@ -305,11 +297,11 @@ void proxy_remote_file(struct server_app *app, int client_socket, const char *re
                 perror("write in send_bad_gateway failed");
             close(server_socket);
         }
-        if (bytes_received == 0)
+        if (bytes_read == 0)
             break;
 
         // Forward response to original client.
-        if (write(client_socket, response, bytes_received) == -1)
+        if (write(client_socket, response, bytes_read) == -1)
         {
             perror("write failed");
             close(server_socket);
