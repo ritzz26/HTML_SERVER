@@ -144,59 +144,50 @@ void handle_request(struct server_app *app, int client_socket) {
     strcpy(request, buffer);
 
     // TODO: Parse the header and extract essential fields, e.g. file name
-    char method[8], path[256], protocol[16];
-    char *saveptr;
-    char *line = strtok_r(request, "\r\n", &saveptr);
+    size_t index = 5;
+    size_t num_chars = 0;
 
-    sscanf(line, "%s %s %s", method, path, protocol);
-    // printf("path: %s\n", path);
-    while ((line = strtok_r(NULL, "\r\n", &saveptr)) != NULL) {
-        
+    while (request[index] != ' ')
+    {
+        num_chars++;
+        index++;
     }
-    int i;
-    for (i = 0; i < strlen(path); i++) {
-        if (path[i] == '%') {
-            if (i+1 < strlen(path) && path[i+1] == '2') {
-                if (i+2 < strlen(path) && path[i+2] == '0') {
-                    path[i] = ' ';
-                    int j;
-                    for (j = i+3; path[j] != '\0'; ++j) {
-                        path[j-2] = path[j];
-                    }
-                    path[j-2] = '\0';
+
+    char file_name[num_chars + 1];
+    strncpy(file_name, request + 5, num_chars);
+    file_name[num_chars] = '\0';
+
+    // If the requested path is "/" (root), defaults to index.html.
+    if (strlen(file_name) == 0)
+        strcpy(file_name, "index.html");
+    else
+        {
+            size_t length = strlen(file_name);
+            for (size_t i = 0; i + 2 < length; i++)
+            {
+                if (file_name[i] == '%' && file_name[i + 1] == '2' && file_name[i + 2] == '0')
+                {
+                    file_name[i] = ' ';
+                    memmove(&file_name[i + 1], &file_name[i + 3], strlen(&file_name[i + 3]) + 1);
+                }
+                else if(file_name[i] == '%' && file_name[i + 1] == '2' && file_name[i + 2] == '5'){
+                    file_name[i] = '%';
+                    memmove(&file_name[i + 1], &file_name[i + 3], strlen(&file_name[i + 3]) + 1);
                 }
             }
         }
-    }
-    
-    for (i = 0; i < strlen(path); i++) {
-        if (path[i] == '%') {
-            if (i+1 < strlen(path) && path[i+1] == '2') {
-                if (i+2 < strlen(path) && path[i+2] == '5') {
-                    path[i] = '%';
-                    int j;
-                    for (j = i+3; path[j] != '\0'; ++j) {
-                        path[j-2] = path[j];
-                    }
-                    path[j-2] = '\0';
-                }
-            }
-        }
-    }
 
-    if (strcasecmp(protocol, "HTTP/1.1") == 0) {
-    if (strlen(path) > 3 && strcmp(path + strlen(path) - 3, ".ts") == 0) {
+    if (strlen(file_name) > 3 && strcmp(file_name + strlen(file_name) - 3, ".ts") == 0) {
         proxy_remote_file(app, client_socket, request);
     } else {
-        if (strcmp(path, "/") == 0) {
+        if (strcmp(file_name, "/") == 0) {
             // Redirect requests for "/" to "index.html"
             serve_local_file(client_socket, "/index.html");
             free(request);
             return;
         }
-        serve_local_file(client_socket, path);
+        serve_local_file(client_socket, file_name);
         }
-    }
 
     free(request);
 }
